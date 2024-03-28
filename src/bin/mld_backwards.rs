@@ -11,6 +11,7 @@ fn main() {
 
     let nn = MultiLayerPerceptron::new(3, &[4, 4, 1]);
 
+    // Run 1000 epochs.
     for _ in 1..100 {
         // Calculate predictions for the neural network.
         let predictions = xs
@@ -21,10 +22,7 @@ fn main() {
 
         println!(
             "{:?}",
-            predictions
-                .iter()
-                .map(|p| p.inner.as_ref().borrow().data)
-                .collect::<Vec<_>>()
+            predictions.iter().map(|p| p.data()).collect::<Vec<_>>()
         );
 
         // Calculate loss as the Squared Root Errors - the sum of pow((x - y), 2.0)
@@ -36,17 +34,16 @@ fn main() {
         println!("{}", loss);
 
         // Reset gradients.
-        nn.parameters()
-            .iter()
-            .for_each(|p| p.inner.as_ref().borrow_mut().grad = 0.0);
+        nn.parameters().iter().for_each(|p| p.set_grad(0.0));
 
         // Calculate new gradients from loss.
-        loss.inner.as_ref().borrow_mut().grad = 1.0;
-        loss.inner.as_ref().borrow().backward();
+        loss.set_grad(1.0);
+        loss.backward();
 
+        // Sets new values for the weights.
         nn.parameters().iter().for_each(|p| {
-            let mut inner = p.inner.as_ref().borrow_mut();
-            inner.data -= 0.01 * inner.grad;
+            let new_weight = p.data() - 0.05 * p.grad();
+            p.set_data(new_weight);
         });
     }
 }

@@ -2,6 +2,7 @@ use std::{cell::RefCell, fmt::Display, ops, rc::Rc};
 
 pub type ValueInnerRef = Rc<RefCell<ValueInner>>;
 
+/// Represents different operations that can be performed on a `Value`.
 #[derive(Clone, Debug)]
 pub enum Op {
     None,
@@ -24,6 +25,7 @@ impl Display for Op {
     }
 }
 
+/// Represents the inner data of a `Value`.
 #[derive(Debug)]
 pub struct ValueInner {
     pub data: f32,
@@ -33,6 +35,18 @@ pub struct ValueInner {
 }
 
 impl ValueInner {
+    /// Creates a new `ValueInner` instance.
+    ///
+    /// # Arguments
+    ///
+    /// * `data` - The data value.
+    /// * `op` - The operation associated with the value.
+    /// * `grad` - The gradient value.
+    /// * `label` - An optional label for the value.
+    ///
+    /// # Returns
+    ///
+    /// A `ValueInnerRef` reference to the newly created `ValueInner` instance.
     pub fn new(data: f32, op: Op, grad: f32, label: Option<&'static str>) -> ValueInnerRef {
         Rc::new(RefCell::new(ValueInner {
             data,
@@ -42,6 +56,7 @@ impl ValueInner {
         }))
     }
 
+    /// Performs backward propagation of gradients for the value.
     pub fn backward(&self) {
         match &self.op {
             Op::Add(a, b) => {
@@ -70,12 +85,26 @@ impl ValueInner {
     }
 }
 
+/// Represents a value in the computation graph.
+///
+/// The `Value` struct is used to store a scalar value along with its associated operations and gradients.
+/// It is part of a simple automatic differentiation framework implemented in RustyMicroGrad.
 #[derive(Clone, Debug)]
 pub struct Value {
     pub inner: Rc<RefCell<ValueInner>>,
 }
 
 impl Value {
+    /// Creates a new `Value` instance.
+    ///
+    /// # Arguments
+    ///
+    /// * `data` - The data value.
+    /// * `label` - An optional label for the value.
+    ///
+    /// # Returns
+    ///
+    /// A `Value` instance.
     pub fn new(data: f32, label: Option<&'static str>) -> Value {
         Value {
             inner: Rc::new(RefCell::new(ValueInner {
@@ -87,16 +116,30 @@ impl Value {
         }
     }
 
+    /// Computes the hyperbolic tangent of the value.
+    ///
+    /// # Returns
+    ///
+    /// A new `Value` instance representing the hyperbolic tangent of the original value.
     pub fn tanh(&self) -> Value {
         let x = self.inner.borrow().data;
         let t = (f32::exp(2.0 * x) - 1.0) / (f32::exp(2.0 * x) + 1.0);
         let op = Op::TanH(self.inner.clone(), t);
         let grad = 0.0;
         Value {
-            inner: ValueInner::new(x, op, grad, Some("tanh")),
+            inner: ValueInner::new(t, op, grad, Some("tanh")),
         }
     }
 
+    /// Computes the power of the value.
+    ///
+    /// # Arguments
+    ///
+    /// * `p` - The power value.
+    ///
+    /// # Returns
+    ///
+    /// A new `Value` instance representing the power of the original value.
     pub fn pow(&self, p: f32) -> Value {
         let data = self.inner.borrow().data;
         let out = data.powf(p);
@@ -105,6 +148,28 @@ impl Value {
         Value {
             inner: ValueInner::new(out, op, grad, Some("pow")),
         }
+    }
+
+    /// Performs backward propagation of gradients for the value.
+    pub fn backward(&self) {
+        self.inner.borrow().backward()
+    }
+
+    pub fn data(&self) -> f32 {
+        self.inner.borrow().data
+    }
+
+    pub fn set_data(&self, data: f32) {
+        self.inner.borrow_mut().data = data;
+    }
+
+    pub fn grad(&self) -> f32 {
+        self.inner.borrow().grad
+    }
+
+    /// Sets the gradient for the value.
+    pub fn set_grad(&self, grad: f32) {
+        self.inner.borrow_mut().grad = grad;
     }
 }
 
@@ -202,9 +267,17 @@ impl ops::Sub for &Value {
 impl ops::Div for Value {
     type Output = Value;
     fn div(self, rhs: Self) -> Self::Output {
-        self * rhs.pow(-1.0)
+        (&self).div(&rhs)
     }
 }
+
+impl ops::Div for &Value {
+    type Output = Value;
+    fn div(self, rhs: Self) -> Self::Output {
+        self * &rhs.pow(-1.0)
+    }
+}
+
 impl From<ValueInnerRef> for Value {
     fn from(inner: ValueInnerRef) -> Self {
         Value { inner }
@@ -216,5 +289,55 @@ impl From<&ValueInnerRef> for Value {
         Value {
             inner: inner.clone(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_addition() {
+        let a = Value::new(2.0, Some("a"));
+        let b = Value::new(3.0, Some("b"));
+        let c = a + b;
+        assert_eq!(c.data(), 5.0);
+        assert_eq!(c.grad(), 0.0);
+    }
+
+    #[test]
+    fn test_multiplication() {
+        let a = Value::new(2.0, Some("a"));
+        let b = Value::new(3.0, Some("b"));
+        let c = a * b;
+        assert_eq!(c.data(), 6.0);
+        assert_eq!(c.grad(), 0.0);
+    }
+
+    #[test]
+    fn test_tanh() {
+        let a = Value::new(0.5, Some("a"));
+        let b = a.tanh();
+        assert!(b.data() - 0.46211717 < 0.0001);
+        assert_eq!(b.grad(), 0.0);
+    }
+
+    #[test]
+    fn test_pow() {
+        let a = Value::new(2.0, Some("a"));
+        let b = a.pow(3.0);
+        assert_eq!(b.data(), 8.0);
+        assert_eq!(b.grad(), 0.0);
+    }
+
+    #[test]
+    fn test_backward() {
+        let a = Value::new(2.0, Some("a"));
+        let b = Value::new(3.0, Some("b"));
+        let c = &a * &b;
+        c.set_grad(1.0);
+        c.backward();
+        assert_eq!(a.grad(), 3.0);
+        assert_eq!(b.grad(), 2.0);
     }
 }

@@ -1,9 +1,17 @@
+/// This module contains the implementation of a neural network.
 mod nn;
+
+/// This module contains the implementation of a value used in the neural network.
 mod value;
 
 pub use nn::*;
 pub use value::*;
 
+/// Prints the debug information of a given `Value`.
+///
+/// This function recursively traverses the `Value` and prints the debug information
+/// of each operation it encounters. It also prints the label, data, and gradient of the `Value`.
+///
 pub fn debug(v: &Value) {
     let v = v.inner.borrow();
     match &v.op {
@@ -18,6 +26,10 @@ pub fn debug(v: &Value) {
             println!("{}", v.op)
         }
         Op::TanH(v, _) => {
+            debug(&v.into());
+            println!("{}", v.borrow().op);
+        }
+        Op::Pow(v, _) => {
             debug(&v.into());
             println!("{}", v.borrow().op);
         }
